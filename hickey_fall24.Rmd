@@ -1,0 +1,293 @@
+---
+title: "Hickey Lab!"
+author: "Mariah Culpepper"
+---
+
+```{r}
+library(RColorBrewer)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(networkD3)
+
+
+```
+
+```{r}
+newmeta = read.csv("/Users/riahcul/Downloads/20241106_allmetadata.csv")
+newmeta[newmeta == ""] <- NA
+```
+
+```{r}
+tissue_freq <- newmeta |>
+  group_by(renamed_tissue) |>
+  summarize(Frequency = n()) |>
+  arrange(desc(Frequency))
+
+print(tissue_freq)
+
+```
+
+```{r}
+tissue_top <- head(tissue_freq, 20)
+print(tissue_top)
+```
+
+```{r}
+library(RColorBrewer)
+library(viridisLite)
+ 
+renamed_tissues <- table(tissue_top$tissue)
+#mypalette <- brewer.pal(length(tissues), "Set3")
+mypalette <- viridis(19)
+#my_palette <- brewer.pal(19, "Set3")
+
+tissue_top |>
+  filter(renamed_tissue != "NA")|>
+  ggplot(
+    aes(x= reorder(renamed_tissue, Frequency), y = Frequency, fill = renamed_tissue)
+  ) + geom_bar(stat= "identity") + coord_flip() +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(
+    title = "Top 20 Tissue Types in Metadata (11/06/24)",
+    x = "Tissue Types"
+  )
+  
+```
+
+```{r}
+disease_freqs <- newmeta |>
+  group_by(disease) |>
+  summarize(Frequency = n()) |>
+  arrange(desc(Frequency))
+
+print(disease_freqs)
+
+disease_freqs <- disease_freqs |>
+  mutate(
+    disease = if_else(disease == "Healthy", "normal", disease)
+  )
+
+#mypalette <- brewer.pal(length(tissues), "Set3")
+
+library(ggplot2)
+library(dplyr)
+library(viridis)
+
+mypalette <- brewer.pal(8, "Paired") 
+
+# Filtering out 'cancer' before passing to ggplot
+disease_freqs |>
+  filter(disease != "cancer") |>  
+  filter(disease != "normal") |>
+  ggplot(aes(x = reorder(disease, Frequency), y = Frequency, fill = mypalette)) +
+  geom_bar(stat = "identity", color = "black") +  
+  scale_fill_manual(values = mypalette) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  geom_text(aes(label = Frequency), position = position_dodge(width=.9), hjust=1.1) +
+  labs(
+    title = "Variation of Non-cancer Diseases in Metadata",
+    x = "Disease"
+  ) +
+  coord_flip()
+
+```
+
+```{r}
+sex_freq <- newmeta |>
+  group_by(sex) |>
+  mutate(
+    sex = if_else(sex == "unknown", NA_character_, sex)
+    ) |>
+  summarize(Frequency = n()) |>
+  arrange(desc(Frequency))
+
+sex_freq |>
+  ggplot(
+    aes(x= reorder(sex, Frequency), y = Frequency, fill = sex)
+  ) + geom_bar(stat= "identity", color = "black") + 
+    scale_fill_manual(breaks = c("female", "male"),
+                     values = c("#52854C", "#4E84C4"), na.value = "#D16103") +
+   geom_text(aes(label = Frequency), position = position_dodge(width=.9), hjust=1.1) +
+  theme_minimal() +
+  theme(legend.position = "none") + coord_flip() +
+  labs(
+    title = "Sex distribution in Metadata (11/06/2024)",
+    x = "Sex"
+  )
+
+```
+
+```{r}
+#newmetaupdate represents cancer or other and standardizes age
+newmeta_update <- newmeta |>
+  mutate(
+    newDisease = if_else(disease == "cancer", "cancer", "other"))
+
+newmeta_update <- newmeta_update |>
+  mutate(
+    newAge = round(as.numeric(age)))
+
+newmeta_update |>
+  filter(!is.na(newDisease)) |>
+  filter(!is.na(newAge)) |>
+  ggplot(
+    aes(x = newAge, fill = newDisease)) +
+    geom_boxplot() +
+  scale_fill_manual(breaks = c("cancer", "other"),
+                     values = c("skyblue", "violetred3")) +
+  facet_wrap(~newDisease, ncol =1) +
+  labs(
+    title = "Age Distribution by Cancer Status (11/06/2024)",
+    x = "Age (rounded)"
+  ) + 
+  theme_classic() +
+  theme(legend.position = "none", axis.ticks.y = element_blank(), axis.text.y = element_blank()) 
+```
+```{r}
+newmeta_update |>
+  filter(newAge != "NA") |>
+  filter(renamed_tissue != "NA") |>
+  filter(large_tissue_unit == "Reproductive System") |>
+  ggplot(
+    aes(x = newAge, y = renamed_tissue)
+  ) +
+  geom_point()
+
+```
+```{r}
+newmeta_update <- newmeta_update |>
+   mutate(
+    sex = if_else(sex == "unknown", NA_character_, sex)
+    )
+
+newmeta_update |>
+  ggplot(
+    aes(x = sex, fill = renamed_tissue)) + 
+  geom_bar(position = "stack") +
+  facet_wrap(~newDisease) +
+  labs(
+    title = "Gender differences in tissue type across cancer and non-cancer diseases"
+  ) +
+  theme_classic() 
+```
+
+```{r}
+library(wesanderson)
+
+newmeta_update |>
+  filter(large_tissue_unit == "Immune System") |>
+  ggplot(
+    aes(x = sex, fill = tissue)) + 
+  geom_bar(position = "stack") +
+    scale_fill_manual(values = wes_palette("GrandBudapest2", n = 4)) +
+  facet_wrap(~newDisease) +
+  labs(
+    title = "Gender differences in the immune system across cancer and non-cancer diseases"
+  ) +
+  theme_classic()
+```
+```{r}
+newmeta_update |>
+  filter(large_tissue_unit == "Digestive System") |>
+  ggplot(
+    aes(x = sex, fill = tissue)) + 
+  geom_bar(position = "stack") +
+  scale_fill_manual(values = brewer.pal(8, "Paired")) +
+    facet_wrap(~newDisease) +
+  labs(
+    title = "Gender differences in the digestive system across cancer and non-cancer diseases"
+  ) +
+  theme_classic()
+```
+```{r}
+newmeta_update |>
+  filter(large_tissue_unit == "Digestive System") |>
+  ggplot(
+    aes(x = sex, fill = tissue)) + 
+  geom_bar() +
+  scale_fill_manual(values =brewer.pal(8, "Paired")) +
+  labs(
+    title = "Gender differences in tissue types within the digestive system"
+  ) +
+  theme_classic()
+```
+
+```{r}
+newmeta_update |>
+  filter(large_tissue_unit == "Nervous System") |>
+  ggplot(
+    aes(x = sex, fill = tissue)) + 
+  geom_bar(position = "stack") +
+  scale_fill_manual(values = brewer.pal(8, "Paired")) +
+    facet_wrap(~newDisease) + 
+  labs(
+    title = "Gender differences in the nervous system across cancer and non-cancer diseases"
+  ) +
+  theme_classic()
+```
+
+```{r}
+newmeta_update |>
+  filter(large_tissue_unit == "Nervous System") |>
+  ggplot(
+    aes(x = sex, fill = tissue)) + 
+  geom_bar() +
+  scale_fill_manual(values = brewer.pal(8, "Paired")) +
+  labs(
+    title = "Gender differences in tissue types within the nervous system"
+  ) +
+  theme_classic()
+
+```
+```{r}
+library(wordcloud)
+
+word_freqs <- newmeta_update |>
+  #mutate(dataset_name = str_replace(dataset_name, "^([\\d]{4}_[A-Za-z]+)_.*", "\\1")) |>
+  group_by(dataset_name) |>
+  summarize(Frequency = n()) |>
+  arrange(desc(Frequency))
+
+print(word_freqs)
+
+wordcloud(words = word_freqs$dataset_name, freq = word_freqs$Frequency, min.freq = 1, scale = c(1.3, 0.3),
+          random.order = FALSE, rot.per = .25)
+
+
+```
+```{r}
+word_freqs |>
+  ggplot(
+    aes(x = dataset_name, y = Frequency, size = Frequency, color = dataset_name)) +
+      geom_point(alpha =.7) +
+      scale_size(range = c(5, 20)) +
+      theme_minimal() +
+  theme(legend.position = "none",
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()) +
+  labs(
+    title = "Frequency of 35 Datasets (11/06/24)",
+    x = ""
+  )
+  
+```
+
+```{r}
+library(treemap)
+
+treemap(word_freqs,
+        index = c("dataset_name"),
+        vSize = "Frequency",
+        vColor = "Frequency",
+        title = "Frequency: 35 Unique Datasets",
+        draw = TRUE)
+```
+
+```{r}
+print(length(unique(word_freqs$dataset_name)))
+```
+
