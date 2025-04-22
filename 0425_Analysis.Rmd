@@ -1,5 +1,1437 @@
 ---
-title: "0425_Analysis"
-output: html_document
+title: "Figure Generation - Hickey Lab Spring 25"
+author: Mariah Culpepper
+date: 04/22/25
+output: github_document
 ---
 
+```{r}
+library(RColorBrewer)
+library(tidyverse)
+library(wordcloud)
+library(dplyr)
+library(ggplot2)
+library(tidytext)
+library(treemap)
+library(paletteer)
+library(stringr)
+library(scales)
+library(plotly)
+library(networkD3)
+library(treemapify)
+library(hexbin)
+library(ggforce)
+library(hrbrthemes)
+```
+
+```{r}
+data = read.csv("/Users/riahcul/Downloads/041525_locsofspatialdata.csv") #update with most recent Locations of Spatial Data csv
+data[data == ""] <- NA
+```
+
+```{r}
+data <- data |>
+  mutate(year = str_extract(folder_name, "\\d{4}")) # creating year column for future analysis
+
+data$tissue <- trimws(data$tissue)
+
+# creating frequency data frames for various columns in locsofspatialdata
+x_freqs <- data |>
+  group_by(x_col_name) |>
+  summarize(Frequency = n()) |>
+  arrange(desc(Frequency))
+
+y_freqs <- data |>
+  group_by(y_col_name) |>
+  summarize(Frequency = n()) |>
+  arrange(desc(Frequency))
+
+celltype_freqs <- data |>
+  group_by(celltype_col_name) |>
+  summarize(Frequency = n()) |>
+  arrange(desc(Frequency))
+
+uniqueregion_freqs <- data |>
+  group_by(uniqueregion_col_name) |>
+  summarize(Frequency = n()) |>
+  arrange(desc(Frequency))
+
+modality_freqs <- data |>
+  group_by(modality, year) |>
+  summarize(Frequency = n(), .groups = "drop") |>
+  arrange(desc(Frequency))
+
+disease_freqs <- data |>
+  group_by(disease) |>
+  summarize(Frequency = n()) |>
+  arrange(desc(Frequency))
+
+disease_year <- data |>
+  group_by(disease, year, priority) |>
+  summarize(Frequency = n(), .groups = "drop") |>
+  arrange(desc(Frequency))
+
+tissue_freqs <- data |> 
+  group_by(tissue, year, priority) |> 
+  summarize(Frequency = n(), .groups = "drop") |> 
+  arrange(desc(Frequency))
+```
+
+```{r}
+# a lot of initial visualization to understand the trends in each mini dataframe that was created 
+x_freqs |>
+  ggplot(aes(x = reorder(x_col_name, Frequency), y=Frequency, fill = x_col_name)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(
+    title = "X-Column Name Diversity",
+    x = "X-Column Name across Datasets",
+  ) +
+  coord_flip()
+
+y_freqs |>
+  ggplot(aes(x = reorder(y_col_name, Frequency), y=Frequency, fill = y_col_name)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(
+    title = "Y-Column Name Diversity",
+    x = "Y-Column Name across Datasets",
+  ) +
+  coord_flip()
+
+celltype_freqs |>
+  ggplot(aes(x = reorder(celltype_col_name, Frequency), y=Frequency, fill = celltype_col_name)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(
+    title = "Cell Type Name Diversity",
+    x = "Cell Type Column Name across Datasets",
+  ) +
+  coord_flip()
+
+uniqueregion_freqs |>
+  ggplot(aes(x = reorder(uniqueregion_col_name, Frequency), y=Frequency, fill = uniqueregion_col_name)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(
+    title = "Unique Region Name Diversity",
+    x = "Unique Region Column Name across Datasets",
+  ) +
+  coord_flip()
+
+modality_freqs |>
+  ggplot(aes(x = reorder(modality, Frequency), y=Frequency, fill = modality)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(
+    title = "Variation in Modality",
+    x = "Modality",
+    subtitle = "Need to update"
+  ) +
+  coord_flip()
+
+disease_freqs |>
+  ggplot(aes(x = reorder(disease, Frequency), y=Frequency, fill = disease)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(
+    title = "Variation in Disease",
+    x = "Diseases across Datasets",
+  ) +
+  coord_flip()
+
+tissue_freqs |> 
+  ggplot(aes(x = reorder(tissue, Frequency), y=Frequency, fill = tissue)) + geom_bar(stat ="identity") + 
+  theme_minimal() + 
+  theme(legend.position = "none") + 
+  labs(
+    title = "Variation in Disease", 
+    x = "Diseases across Datasets") + 
+  coord_flip()
+```
+
+```{r}
+# ex. "Cancer, Normal" -> "Cancer", "Normal" (separate instances)
+data_long <- disease_freqs |> 
+  mutate(disease_split = strsplit(disease, ",")) |> 
+  unnest(disease_split)
+
+disease_counts <- data_long |> 
+  group_by(disease_split) |> 
+  summarize(Frequency = sum(Frequency)) |> 
+  arrange(desc(Frequency))
+
+# making a lollipop chart for disease variation, great alternative to barcharts and other frequency charts
+disease_counts |> 
+  ggplot(aes(x = reorder(disease_split, -Frequency), y=Frequency)) + 
+  geom_point(size=3) + 
+  geom_segment(aes(x= disease_split, xend=disease_split, y=0, yend = Frequency)) + 
+  labs( 
+    title = "Variation in Disease across Spatial Datasets", 
+    x = "Diseases across Datasets") + 
+  theme_minimal() + 
+  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1), 
+        axis.text.x= element_text(angle=25, vjust=.6))
+```
+
+```{r}
+# custom color palette
+col_vector <- c("#B3E2CD", "#E4C5AF", "#CBD5E8", "#F4CAE4",  
+"#E6F5C9", "#FFD6E0", "#F1E2CC", "#CCCCCC",  
+"#A6CEE3", "#FF9AA2", "#FFCC80", "#CAB2D6",  
+"#EDE275", "#B15928", "#8DD3C7", "#BC80BD")
+
+#similar approach with modality frequencies in making sure each modality is recognized as individual instances within same dataset
+moddata_long <- modality_freqs |> 
+  mutate(modality_split = strsplit(modality, ",")) |> 
+  unnest(modality_split) |>
+  mutate(modality_split = str_replace(modality_split, "MxIF", "MIF"))
+
+modality_counts <- moddata_long |> 
+  group_by(modality_split, year) |> 
+  summarize(Frequency = sum(Frequency), .groups = "drop") |> 
+  arrange(desc(Frequency))
+
+print(modality_counts)
+
+# bar chart showing modality diversity by year!
+modality_counts |> 
+  ggplot( 
+  aes(x = year, y = Frequency, fill = modality_split)) + 
+  geom_bar(stat = "identity", color = "black") +
+  scale_fill_manual(values = col_vector) +
+theme_classic() +
+  labs(
+    title = "Modality Prevalence Across Years (2017-2024)",
+  )
+  
+  
+
+
+```
+
+```{r}
+# for some reason, this lollipop chart has multiple balls, think this is a frequency error
+modality_counts |> 
+  ggplot(aes(x = reorder(modality_split, -Frequency), y=Frequency)) + 
+  geom_point(size=3) + 
+  geom_segment(aes(x= reorder(modality_split, -Frequency), xend=modality_split, y=0, yend = Frequency)) + 
+  labs( 
+    title = "Variation in Modalities across Spatial Datasets", 
+    x = "Modalities across Datasets") + 
+  theme_minimal() + 
+  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1), 
+        axis.text.x= element_text(angle=60, vjust=.55))
+```
+
+```{r}
+# another lollipop chart for unique region name diversity
+uniqueregion_freqs |> 
+  ggplot(aes(x = reorder(uniqueregion_col_name, Frequency), y=Frequency)) + 
+  geom_point(size=3) + 
+  geom_segment(aes(x= uniqueregion_col_name, xend=uniqueregion_col_name, y=0, yend = Frequency)) + 
+  labs( 
+    title = "Unique Region Name Diversity", 
+    x = "Unique Region Names across Datasets") + 
+  theme_minimal() + 
+  theme(panel.border = element_rect(color ="black", fill = NA, size = 1), 
+        axis.text.x= element_text(angle=0, vjust=.6)) + 
+  coord_flip()
+
+```
+```{r}
+# another lollipop chart for tissue variation
+tissuedata_long <- tissue_freqs |> 
+  mutate(tissue_split = strsplit(tissue, ",")) |> 
+  unnest(tissue_split)
+
+tissuedata_long$tissue_split <- trimws(tissuedata_long$tissue_split)
+
+tissue_counts <- tissuedata_long |> 
+  group_by(tissue_split) |> 
+  summarize(Frequency = sum(Frequency)) |> 
+  arrange(desc(Frequency))
+
+tissue_counts |> 
+  ggplot(aes(x = reorder(tissue_split, Frequency), y=Frequency)) + 
+  geom_point(size=3) + 
+  geom_segment(aes(x= tissue_split, xend=tissue_split, y=0, yend = Frequency)) + 
+  labs( 
+    title = "Variation in Tissue across Spatial Datasets", 
+    x ="Tissues across Datasets") + 
+  theme_minimal() + 
+  theme(panel.border = element_rect(color = "black", fill = NA, size = 1), 
+        axis.text.x= element_text(angle=0, vjust=.6)) + 
+  coord_flip()
+```
+
+```{r}
+# preprocessing the titles to reveal which terms are most used in the papers we've collected
+# this could help in finding future papers and gives context to what researchers think are the most relevant words in spatial-omics
+title_freqs <- data |> 
+  group_by(title, year, modality) |> 
+  summarize(Frequency = n(), .groups = "drop") |> 
+  arrange(desc(Frequency))
+
+title_freqs <- title_freqs |> 
+  rename(titles = title)
+
+# splitting each string by a space delimiter
+# ex. "I love chocolate" -> "I", "love", "chocolate"
+titledata_long <- title_freqs |> 
+  mutate(title_split = strsplit(titles, " ")) |> 
+  unnest(title_split)
+
+# remove commas
+titledata_long <- titledata_long |> 
+  mutate(title_split = gsub(",", "", title_split)) |> 
+  mutate(title_split = tolower(title_split))
+
+title_counts <- titledata_long |> 
+  group_by(title_split) |> 
+  summarize(Frequency = sum(Frequency)) |> 
+  arrange(desc(Frequency))
+
+# these words weren't included in title_clean_counts because they are "filler"
+extra_words <- c("of", "and", "in", "the", "by", "to", "with", "a", "for", "from", "an", "at", "the", "is", "but")
+
+title_clean_counts <- title_counts |> 
+  filter(!title_split %in% extra_words)
+
+print(title_clean_counts)
+```
+
+```{r}
+# wordcloud showing the most popular words in our collected datasets!
+wordcloud(words = title_clean_counts$title_split, freq = title_clean_counts$Frequency,
+          min.freq = 1, scale = c(1.5, 0.475), random.order = FALSE, rot.per = .25, colors=brewer.pal(8,"Dark2"))
+```
+
+```{r}
+# treemaps are similar to pie charts or other proportional representation graphs
+# this one is showing the diversity of the x-column before standardization
+treemap(x_freqs, 
+        index = c("x_col_name"), 
+        vSize = "Frequency", 
+        vColor = "Frequency", 
+        title = "X-Column Name Diversity in Spatial Datasets", 
+        palette = "Set3", 
+        draw = TRUE)
+```
+
+```{r}
+# treemap showing the diversity of y-column before standardization
+treemap(y_freqs, 
+        index = c("y_col_name"), 
+        vSize = "Frequency", 
+        vColor = "Frequency", 
+        title = "Y-Column Name Diversity in Spatial Datasets", 
+        palette = "Set3", 
+        draw = TRUE)
+```
+
+```{r}
+# treemap showing the diversity of the unique region column before standardization
+# I don't like how you can't see all of the names in this plot, that is something to make sure of
+treemap(uniqueregion_freqs, 
+        index = c("uniqueregion_col_name"), 
+        vSize = "Frequency", 
+        vColor = "Frequency", 
+        title = "Unique Region Name Diversity in Spatial Datasets", 
+        palette = "Pastel2", 
+        draw = TRUE)
+
+```
+```{r}
+# making pie charts to check various columns in locsofspatialdata
+
+# this creates a dataframe stating whether or not the metadata was added for each dataset
+metaadded_freqs <- data |>
+  group_by(metadata_file_added) |>
+  summarize(Frequency = n()) |>
+  arrange(desc(Frequency))
+
+# a blank row is constituted as "no" 
+metaadded_freqs <- metaadded_freqs |> mutate(
+  metadata_file_added = if_else(is.na(metadata_file_added), "No", metadata_file_added)
+  )
+
+print(metaadded_freqs)
+
+mypalette <- brewer.pal(3, "Pastel1") 
+
+Prop <- c(36, 32)
+pie(Prop, labels = c("Metadata file added", "Metadata file not added"), col=mypalette)
+
+metaadded_freqs$fraction = metaadded_freqs$Frequency / sum(metaadded_freqs$Frequency)
+metaadded_freqs$ymax = cumsum(metaadded_freqs$fraction)
+metaadded_freqs$ymin = c(0, head(metaadded_freqs$ymax, n=-1))
+metaadded_freqs$labelPosition <- (metaadded_freqs$ymax + metaadded_freqs$ymin) / 2
+metaadded_freqs$label <- paste0(metaadded_freqs$metadata_file_added, "\n value: ", metaadded_freqs$Frequency)
+
+# this was to create a donut chart, hence the manipulation above 
+metaadded_freqs |>
+  ggplot(
+    aes(ymax = ymax, ymin = ymin, xmax = 4, xmin = 3, fill = metadata_file_added)
+  ) +
+  geom_rect() +
+  geom_label(x=3.5, aes(y=labelPosition, label =label), size=4) +
+  scale_fill_brewer(palette = "BuPu") +
+  coord_polar(theta = "y") +
+  xlim(c(2,4)) +
+  theme_void() +
+  theme(legend.position = "none") +
+  labs(
+    title = "Metadata File Added?"
+  )
+ 
+```
+```{r}
+#calculating the yes and no frequencies for "need to email" and "need to email for metadata" columns 
+email_freqs <- data |>
+  group_by(need_to_email) |>
+  summarize(Frequency = n()) |>
+  arrange(desc(Frequency))
+
+email_freqs <- email_freqs |>
+  mutate(
+    need_to_email = if_else(is.na(need_to_email), "No", need_to_email)
+  )
+
+print(email_freqs)
+
+email_md_freqs <- data |>
+  group_by(need_to_email_md) |>
+  summarize(Frequency = n()) |>
+  arrange(desc(Frequency))
+
+email_md_freqs <- email_md_freqs |>
+  mutate(
+    need_to_email_md = if_else(is.na(need_to_email_md), "No", need_to_email_md)
+  )
+
+print(email_md_freqs)
+```
+```{r}
+# pie charts representing the information above
+mypalette1 <- brewer.pal(3, "Purples") 
+mypalette2 <- brewer.pal(3, "OrRd") 
+
+needtoemail <- c(9, 61)
+pie(needtoemail, labels = c("Need to email (7)", "Don't need to email (61)"), col=mypalette1) 
+
+needtoemailmd <- c(8, 62)
+pie(needtoemailmd, labels = c("Need to email for metadata (8)", "Don't need to email for metadata (60)"), col=mypalette2)
+
+
+
+```
+```{r}
+# bar chart showing which labs' data we are using
+lab_freqs <- data |>
+  group_by(lab) |>
+  summarize(Frequency = n()) |>
+  arrange(desc(Frequency))
+
+lab_freqs |>
+  ggplot(aes(x = reorder(lab, Frequency), y=Frequency, fill = lab)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  scale_fill_paletteer_d("cartography::pastel.pal", dynamic = TRUE) +
+  labs(
+    title = "Variation in Labs",
+    x = "Labs across Datasets",
+  ) +
+  coord_flip()
+  
+```
+```{r}
+# pie chart indicating whether a dataset is classified as labeled or unlabeled single
+priority_freqs <- data |>
+  group_by(priority) |>
+  summarize(Frequency = n()) |>
+  arrange(desc(Frequency))
+
+print(priority_freqs)
+
+mypalette <- paletteer_dynamic("cartography::green.pal", 2)
+priority_pie <- c(58, 12)
+pie(priority_pie, labels = c("Labeled Single Cell (57)", "Unlabeled Single Cell (11)"), col=mypalette)
+
+```
+```{r}
+# wordcloud focused on lab name frequency 
+wordcloud(words = lab_freqs$lab, freq = lab_freqs$Frequency, 
+          min.freq = 1, scale = c(5, 1), random.order = FALSE, rot.per = .25, colors=brewer.pal(9,"Pastel1"))
+```
+
+
+```{r}
+# pie chart showing lab names and their contributions
+print(lab_freqs)
+
+palette_lab <- paletteer_dynamic("cartography::green.pal", 13)
+
+labpie <- c(33, 8, 6, 5, 4, 4, 2, 1, 1, 1, 1, 1, 1)
+pie(labpie, labels = c("Angelo", "Nolan", "Hickey", "Bodenmiller", "Sorger", "Walsh", "Burlingame", "Elemento", "Ginty", "Ho", "Lin & Tan", "Theodorescu", "Zou"), col=palette_lab) 
+
+```
+
+```{r}
+# calculating if data has been received after emailing
+redata_freqs <- data |>
+  filter(emailed == "Yes") |>
+  group_by(received_data) |>
+  summarize(Frequency = n()) |>
+  arrange(desc(Frequency))
+
+redata_freqs <- redata_freqs |>
+  mutate(
+    received_data = if_else(is.na(received_data), "No", received_data)
+  )
+
+print(redata_freqs)
+```
+```{r}
+# pie chart indicating the above
+mypalette4 <- brewer.pal(3, "Set2") 
+
+redata <- c(5, 1)
+pie(redata, labels = c("Received data after emailing (5)", "Didn't receive after emailing (1)"), col=mypalette4) 
+```
+
+```{r}
+# first seeing if sex is a column in these data
+sex_freqs <- data |>
+  filter(metadata_file_added == "Yes") |>
+  group_by(sex_col_name) |>
+  summarize(Frequency = n()) |>
+  arrange(desc(Frequency))
+
+sex_freqs <- sex_freqs |>
+  mutate(
+    sex_col_name = if_else(is.na(sex_col_name), "No", sex_col_name)
+  ) 
+
+print(sex_freqs)
+```
+```{r}
+# pie chart showing if sex column is in the dataset
+mypalette5 <- brewer.pal(3, "Blues") 
+
+redata <- c(25, 12)
+pie(redata, labels = c("'Sex' column in metadata file added (25)", "Doesn't have a 'sex' column (11)"), col=mypalette5) 
+```
+```{r}
+# pulling the name of the age column or lack of age column
+age_freqs <- data |>
+  filter(metadata_file_added == "Yes") |>
+  group_by(age_col_name) |>
+  summarize(Frequency = n()) |>
+  arrange(desc(Frequency))
+
+age_freqs <- age_freqs |>
+  mutate(
+    age_col_name = if_else(is.na(age_col_name), "No", age_col_name)
+  ) 
+
+print(age_freqs)
+```
+
+```{r}
+# pie chart showing this age data
+mypalette6 <- brewer.pal(3, "PiYG") 
+
+redata <- c(32, 4)
+pie(redata, labels = c("'Age' col. in metadata file added (32)", "Doesn't have an 'age' column (4)"), col=mypalette6) 
+```
+```{r}
+# breast lung lymph node colon skin tonsil <- top tissue types
+
+# showing the most frequent tissue types by year, faceted by if they're labeled or unlabeled single cell
+rawr <- brewer.pal(5, "Paired")
+tissuedata_long |> 
+  filter(tissue_split %in% c("breast", "lung", "lymph node", "colon", "skin")) |>
+  ggplot( 
+  aes(x = year, y = Frequency, fill = tissue_split)) + 
+  geom_bar(stat = "identity") +
+  facet_wrap(~priority) +
+  scale_fill_manual(values = rawr) +
+theme_classic() +
+  labs(
+    title = "Appearance of 5 Most Frequent Tissue Types by Priority",
+  )
+
+```
+```{r}
+# very similar plot but done by type of disease
+disease_year <- disease_year |>
+  mutate(disease_split = strsplit(disease, ",")) |> 
+  unnest(disease_split)
+
+boom <- brewer.pal(8, "Pastel1")
+
+disease_year |>
+  ggplot( 
+  aes(x = year, y = Frequency, fill = disease_split)) + 
+  geom_bar(stat = "identity") +
+  facet_wrap(~priority) +
+  scale_fill_manual(values = boom) +
+theme_classic()
+  
+```
+
+```{r}
+# treemap that represents the tissue types in the dataset
+# these tissue types are grouped by freuency (>10, 5 - 10, <5)
+#double check if small intestine/intestine/intestines is clarified
+mycolors <- paletteer_c("ggthemes::Blue-Green Sequential", 3)
+tissue_counts$tissue_split <- gsub("intestines", "intestine", tissue_counts$tissue_split)
+tissue_counts <- tissue_counts |>
+  mutate(freq_group = case_when(
+    Frequency > 10 ~ ">10",
+    Frequency >= 5 & Frequency <= 10 ~ "5-10",
+    Frequency < 5 ~ "<5"
+  ))
+
+tissue_counts <- na.omit(tissue_counts)
+
+treemap(tissue_counts, 
+        index = c("freq_group", "tissue_split"), 
+        vSize = "Frequency", 
+        #vColor = "mycolors", 
+        type = "index",
+        fontsize.labels = 9,
+        title = "Representation of Tissue Types by Frequency in Spatial Datasets - intestine & intestines",
+        palette = mycolors, 
+       drop.unused.levels = FALSE,
+        fontface.labels = 1,
+        sortID = "size",
+        na.color = TRUE,
+        draw = TRUE)
+```
+```{r}
+# FIGURE 1
+# exact same tree map except there is no frequency hierarchy, only represented in the size of the blocks not the color of them
+treemap(tissue_counts, 
+        index = c("tissue_split"), 
+        vSize = "Frequency", 
+        #vColor = "mycolors", 
+        type = "index",
+        fontsize.labels = 9,
+        title = "Representation of Tissue Types - intestine & intestines",
+        palette = "Pastel1", 
+       drop.unused.levels = FALSE,
+        fontface.labels = 1,
+        sortID = "-size",
+        na.color = TRUE,
+        draw = TRUE)
+```
+
+```{r}
+# nested pie chart using plot.ly
+# shows if there is a need to email & need to email for metadata
+
+sample_data <- data.frame(group = c('Yes', 'No'), value1 = c(34, 35), value2  = c(7, 61), value3 = c(8, 60), value4 = c(59, 10), value5 = c(5,5))
+#value1 = metadata file added
+#value2 = need to email for metadata
+#value3 = need to email
+#value4 = labeled/unlabeled single cell
+#value5 = NEED TO RECHECK
+plot_ly() |>
+  add_pie(data = sample_data, labels = ~`group`, values = ~`value3`,
+          type = 'pie', hole = .7, sort = F,
+          marker = list(line = list(width=2),
+                        colors = c("#A6CEE3", "#1F78B4")),
+          name = "Need to Email") |>
+  add_pie(data = sample_data, labels = ~`group`, values = ~`value2`,
+          domain = list(
+            x = c(.15, .85),
+            y = c(.15, .85)),
+          sort = F,
+          name = "Need to Email for Metadata") |>
+  layout(
+    title = "Nested Pie Chart for Needing to Email"
+  )
+```
+
+
+```{r}
+# funnel chart representing data processing
+fig <- plot_ly() 
+fig <- fig |>
+  add_trace(
+  type = "funnel",
+  y = c("Datasets in Locs of Spatial Data", "Need to email", "Need to email for metadata", "Received Data"),
+  x = c(58, 7, 6, 5)) 
+fig <- fig |>
+  layout(yaxis = list(categoryarray = c("Datasets in Locs of Spatial Data", "Need to email", "Need to email for metadata", "Received Data")))
+
+fig
+```
+
+```{r}
+# improved iteration of the funnel chart for data processing showing the percentage that pass the guidelines at each step
+
+fig <- plot_ly() 
+fig <- fig |>
+  add_trace(
+  type = "funnel",
+  y = c("Datasets in Locs of Spatial Data", "Labeled Single Cell", "Metadata File Added", "Need to Email", "Need to Email for Metadata", "Emailed", "Received Data"),
+  x = c(60, 50, 32, 9, 8, 6, 5), # these numbers are no longer accurate (04/25)
+  textposition = "inside",
+  textinfo = "value+percent initial",
+  marker = list(color = c("#A6CEE3", "#B2DF8A", "#FB9A99",  "#FDBF6F", "#CAB2D6", "#FFFF99", "#8DD3C7"))) |>
+  layout(
+    title = "Funnel Chart of Data Processing 02/19/25",
+    yaxis = list(categoryarray = c("Datasets in Locs of Spatial Data", "Labeled Single Cell", "Metadata File Added", "Need to Email", "Need to Email for Metadata", "Emailed", "Received Data")))
+
+fig
+
+#plotly_IMAGE(fig, width = 500, heaight = 500, format = "png", scale = 2, out_file = "funnelchart.png")
+```
+
+
+```{r}
+# sankey chart that shows the same thing!
+fig1 <- plot_ly(
+  type = "sankey",
+  orientation = "v",
+  
+  node = list(
+    label = c("Datasets in Locs of Spatial Data", "Labeled Single Cell", "Metadata File Added", "Need to Email", "Need to Email for Metadata", "Received Data"),
+    color = c("#A6CEE3", "#B2DF8A", "#FB9A99", "#FDBF6F", "#CAB2D6", "#FFFF99"),
+    pad = 15,
+    thickness = 20,
+    line = list(
+      color = "black",
+      width = .5
+    )
+  ), 
+  
+  link = list(
+    source = c(0, 1, 1, 3, 4, 4),
+    target = c(1, 2, 3, 4, 5, 5),
+    value = c(50, 31, 7, 6, 5)
+  )
+)
+
+fig1 <- fig1 |> layout(
+    title = "Sankey Diagram for Data Processing 02/25",
+    font = list(
+      size = 10
+    )
+)
+
+fig1
+
+```
+
+
+```{r}
+#improved iteration of sankey chart - ended up not using
+#MOST UPDATED ONE!
+fig1 <- plot_ly(
+  type = "sankey",
+  orientation = "v",
+  
+  node = list(
+    label = c("Datasets in Locs of Spatial Data", "Labeled Single Cell", "Unlabeled Single Cell", "Metadata File Added", "Need to Email", "Emailed", "Received Data"),
+    color = c("#A6CEE3", "#B2DF8A", "#FB9A99", "#FDBF6F", "#CAB2D6", "#FFFF99", "#8DD3C7"),
+    pad = 15,
+    thickness = 20,
+    line = list(
+      color = "black",
+      width = .5
+    )
+  ), 
+  
+  link = list(
+    source = c(0, 0, 1, 1, 4, 5),
+    target = c(1, 2, 3, 4, 5, 6),
+    value = c(50, 10, 32, 9, 6, 5)
+  )
+)
+
+fig1 <- fig1 |> layout(
+    title = "Sankey Diagram for Data Processing 02/25",
+    font = list(
+      size = 10
+    )
+)
+
+fig1
+```
+```{r}
+# bar chart showing the most frequent tissue types in locsofspatialdata
+mypalette <- brewer.pal(10, "Set3")
+
+tissuelocs_top10 <- head(tissue_counts, 10)
+
+tissuelocs_top10 |>
+  filter(tissue_split != "NA") |>
+  ggplot(aes(
+    x = reorder(tissue_split, Frequency),
+    y = Frequency,
+    fill = tissue_split
+  )) +
+  geom_bar(stat = "identity", color = "black") +
+  coord_flip() +
+  scale_fill_manual(values = mypalette) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  geom_text(aes(label = Frequency), position = position_dodge(width=.9), hjust = 1.2) +
+  labs(
+    title = "10 Most Frequent Tissue Types in Locs of Spatial Data",
+    x = "Tissue Type"
+  )
+```
+```{r}
+# distribution of disease in locsofspatialdata
+disease_counts |>
+  filter(disease_split != "NA") |>
+  ggplot(
+    aes(
+    x = reorder(disease_split, Frequency),
+    y = Frequency,
+    fill = disease_split
+  )) +
+  geom_bar(stat = "identity", color = "black") +
+  coord_flip() +
+  scale_fill_manual(values = mypalette) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  geom_text(aes(label = Frequency), position = position_dodge(width=.9), hjust = 1.2) +
+  labs(
+    title = "Distribution of Disease in Locs of Spatial Data",
+    subtitle = "Would be changing Pancreatic Cancer -> Cancer",
+    x = "Tissue Type"
+  )
+```
+```{r}
+# hard coding to create new buckets based on merged dataset and the "Large Tissue Unit"
+# thought adding this to the metadata would make for easier visualizations 
+tis_modal_viz <- data |>
+  mutate(
+    tissue = str_trim(tissue),
+    modality = str_trim(modality)
+  ) |>
+  separate_rows(tissue, sep = ",") |>
+  separate_rows(modality, sep = ",") |>
+  mutate(
+    large_tissue_unit = case_when(
+      tissue %in% c("colon", "liver", "small intestine", "intestine", "intestines", "neck", "stomach", "esophagus", "head", "pancreas") ~ "Digestive System",
+      str_detect(tissue, regex("neck", ignore_case = TRUE)) ~ "Digestive System",
+      str_detect(tissue, regex("esophagus", ignore_case = TRUE)) ~ "Digestive System",
+
+
+      tissue %in% c("lymph node", "tonsil", "thymus", "spleen", "axilla", "chest wall") ~ "Immune System", 
+      str_detect(tissue, regex("axilla", ignore_case = TRUE)) ~ "Immune System",
+      str_detect(tissue, regex("tonsil", ignore_case = TRUE)) ~ "Immune System",
+      str_detect(tissue, regex("chest wall", ignore_case = TRUE)) ~ "Immune System",
+
+
+      tissue %in% c("breast", "ovarian", "decidua", "placenta", "prostate", "rectum") ~ "Reproductive System",
+      str_detect(tissue, regex("breast", ignore_case = TRUE)) ~ "Reproductive System",
+      tissue %in% c("lung") ~ "Respiratory System",
+      str_detect(tissue, regex("lung", ignore_case = TRUE)) ~ "Respiratory System",
+
+      tissue %in% c("brain") ~ "Nervous System",
+      str_detect(tissue, regex("brain", ignore_case = TRUE)) ~ "Nervous System",
+
+      tissue %in% c("kidney", "bladder", "urothelial") ~ "Urinary System",
+      tissue %in% c("bone", "bone marrow") ~ "Musculoskeletal System",
+      str_detect(tissue, regex("bone", ignore_case = TRUE)) ~ "Musculoskeletal System",
+      tissue %in% c("skin", "melaloma") ~ "Integumentary System",
+      str_detect(tissue, regex("skin", ignore_case = TRUE)) ~ "Integumentary System",
+      
+       tissue %in% c("salivary") ~ "Endocrine System",
+
+      TRUE ~ "Other"
+    )
+) |>
+  group_by(large_tissue_unit, tissue, modality) |>
+  summarize(Frequency = n(), .groups = "drop") |>
+  group_by(large_tissue_unit) |>
+  mutate(total_Freq = sum(Frequency)) |>
+  ungroup()
+
+
+  
+```
+
+```{r}
+tis_modal_viz <- tis_modal_viz |> 
+  mutate(
+    tissue = case_when(
+      str_detect(tissue, regex("brain", ignore_case = TRUE)) ~ "brain",  # standardize "brain" variations
+      str_detect(tissue, regex("skin", ignore_case = TRUE)) ~ "skin",    # etc
+      str_detect(tissue, regex("lung", ignore_case = TRUE)) ~ "lung",    # so on
+      str_detect(tissue, regex("breast", ignore_case = TRUE)) ~ "breast", # so forth, did this for every tissue that was giving me problems
+      str_detect(tissue, regex("esophagus", ignore_case = TRUE)) ~ "esophagus", 
+      str_detect(tissue, regex("neck", ignore_case = TRUE)) ~ "neck", 
+      str_detect(tissue, regex("tonsil", ignore_case = TRUE)) ~ "tonsil", 
+
+
+
+      TRUE ~ tissue  # leave other tissues unchanged
+    )
+  ) 
+
+# first iteration: showing the frequency of each large tissue unit and showing the diversity of modality within each tissue
+tis_modal_viz |> 
+  filter(!(is.na(modality))) |>
+  filter(!(is.na(tissue))) |>
+  ggplot( 
+  aes(x = tissue, y = Frequency, fill = modality)) + 
+  geom_col() +
+  facet_wrap(~large_tissue_unit, scales = "free_x") +
+  scale_fill_manual(values = col_vector)+
+theme_classic() +
+  labs(
+    title = "Tissues within Locations of Spatial by Modality and LTU",
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Slant the x-axis labels
+  )
+
+```
+
+
+```{r}
+feb_metadata = read.csv("/Users/riahcul/Downloads/2025another_data.csv") # pulled from kylee or roy's directory on DCC, metadata from feb.
+feb_metadata[feb_metadata == ""] <- NA
+```
+
+```{r}
+# creating age bins from 0 to 100, split by 10: 0-10, 10-20, etc.
+age_md <- feb_metadata |>
+  select(donor, age, sex) |>
+  mutate(age = as.numeric(age)) |>
+  mutate(age = round(age)) |>
+   filter(!is.na(age)) |>
+  mutate(age_bin = cut(age, breaks= seq(0,100, by = 10), right = FALSE)) |>
+  distinct(donor, .keep_all = TRUE) |>
+  group_by(age_bin, sex) |>
+  count() |>
+  ungroup()
+  
+```
+```{r}
+# distribution of ages in metadata - first glance
+age_md |>
+  ggplot(
+    aes(x = age_bin, y = n, fill=age_bin)
+  ) +
+  geom_col() +
+  labs(
+    title = "Binned Ages within Metadata",
+    x = "Ages (Binned)",
+    y = "Frequency"
+  ) +
+  scale_fill_manual(values = mypalette) +
+  theme_minimal() +
+  theme(
+    legend.position = "none"
+  ) 
+```
+```{r}
+#FIGURE 1
+# distribution of ages but also colored by sex (NAs were not included for this chart)
+age_md |>
+  filter(!is.na(sex)) |>
+  ggplot(
+    aes(x = age_bin, y = n, fill=sex)
+  ) +
+  geom_col(color = "black", size = 0.25) +
+  labs(
+    title = "Frequency of Binned Ages within Metadata",
+    x = "Ages (Binned)",
+    y = "Frequency"
+  ) +
+  scale_fill_manual(values = c("#A3C4DC", "#FFD3B6", "#A8E6CF"),
+                    na.value = "#A8E6CF") +
+  theme_minimal() 
+
+```
+```{r}
+# narrowed in on the most prevalent age range to see distribution a bit clearer
+narrow_age_md <- feb_metadata |>
+  select(donor, age, sex) |>
+  mutate(age = as.numeric(age)) |>
+  mutate(age = round(age)) |>
+  filter(!is.na(sex), !is.na(age), age >= 30, age <= 79) |>
+  
+  mutate(age_bin = cut(age, breaks= seq(30,80, by = 5), right = FALSE)) |>
+  distinct(donor, .keep_all = TRUE) |>
+
+  group_by(age_bin, sex) |>
+  count() |>
+  ungroup()
+
+narrow_age_md |>
+  ggplot(
+    aes(x = age_bin, y = n, fill=sex)
+  ) +
+  geom_col(color = "black", size = 0.25) +
+  labs(
+    title = "Frequency of Binned Ages (30-80) within Metadata",
+    x = "Ages (Binned)",
+    y = "Frequency"
+  ) +
+  scale_fill_manual(values = c("#A3C4DC", "#FFD3B6", "#A8E6CF"),
+                    na.value = "#A8E6CF") +
+  theme_minimal() 
+```
+```{r}
+stc = read.csv("/Users/riahcul/Downloads/studytocell.csv") # study to cell csv (original and renamed cell type)
+stc[stc == ""] <- NA
+```
+
+```{r}
+# dataframe for just immune cells from studytocell
+immune_stc <- stc |>
+  filter(Renamed.Cell.Type == "Immune") |>
+  group_by(Original.Cell.Type) |>
+  count()
+```
+
+
+```{r}
+# treemap showing what the original cell type names were before being standardized to "Immune"
+treemap(immune_stc, 
+        index = c("Original.Cell.Type"), 
+        vSize = "n",
+        vColor = "n", 
+        title = "Renamed Cell Type = Immune", 
+        palette = "Set3", 
+        draw = TRUE)
+```
+```{r}
+# treemap showing what the original cell type names were before being standardized to "Noise"
+# was curious to what was characterized as noise in the dataset
+noise_stc <- stc |>
+  filter(Renamed.Cell.Type == "Noise") |>
+  group_by(Original.Cell.Type) |>
+  count()
+
+treemap(noise_stc, 
+        index = c("Original.Cell.Type"), 
+        vSize = "n",
+        vColor = "n", 
+        title = "Renamed Cell Type = Noise", 
+        palette = "Set3", 
+        draw = TRUE)
+```
+```{r}
+# treemap showing what the original cell type names were before being standardized to "Undefined"
+# wanted to see what differentiated this from noise
+undefined_stc <- stc |>
+  filter(Renamed.Cell.Type == "Undefined") |>
+  group_by(Original.Cell.Type) |>
+  count()
+
+treemap(undefined_stc, 
+        index = c("Original.Cell.Type"), 
+        vSize = "n",
+        vColor = "n", 
+        title = "Renamed Cell Type = Undefined", 
+        palette = "Set3", 
+        draw = TRUE)
+```
+```{r}
+# treemap showing what the original cell type names were before being standardized to "Epithelial"
+
+epi_stc <- stc |>
+  filter(Renamed.Cell.Type == "Epithelial") |>
+  group_by(Original.Cell.Type) |>
+  count()
+
+treemap(epi_stc, 
+        index = c("Original.Cell.Type"), 
+        vSize = "n",
+        vColor = "n", 
+        title = "Renamed Cell Type = Epithelial", 
+        palette = "Set3", 
+        draw = TRUE)
+```
+
+```{r}
+# FIGURE 1
+# closer to final iteration of the same modality, large tissue unit frequency chart
+# except this time, it is grouped by large tissue unit instead of tissue
+
+# the thin white lines are really bothering me so trying to fix that
+# also need to use the same color palette throughout these figures
+tis_modal_viz |> 
+  filter(!(is.na(modality))) |>
+  filter(!(is.na(tissue))) |>
+  mutate(large_tissue_unit = fct_reorder(large_tissue_unit, desc(total_Freq))) |>
+  ggplot( 
+  aes(x = large_tissue_unit, y = Frequency, fill = modality)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = col_vector)+
+theme_classic() +
+  labs(
+    title = "Large Tissue Units within Locations of Spatial by Modality",
+    x = "Large Tissue Unit") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Slant the x-axis labels
+  )
+```
+```{r}
+# creating a dataframe that just has the original cell types
+# treemap that shows the diversity and clutter
+ogcelltype_stc <- stc |>
+  group_by(Original.Cell.Type) |>
+  count()
+
+treemap(ogcelltype_stc, 
+        index = c("Original.Cell.Type"), 
+        vSize = "n",
+        vColor = "n", 
+        title = "Original Cell Type", 
+        palette = "Set3", 
+        draw = TRUE)
+
+unique_count <- n_distinct(stc$Original.Cell.Type)
+print(paste("Total unique cell types:", unique_count))
+
+
+```
+
+
+```{r}
+# dataframe that shows only the renamed cell type
+# significantly less cluttered
+renamedcelltype_stc <- stc |>
+  group_by(Renamed.Cell.Type) |>
+  count()
+
+treemap(renamedcelltype_stc, 
+        index = c("Renamed.Cell.Type"), 
+        vSize = "n",
+        vColor = "n", 
+        title = "Renamed Cell Type", 
+        palette = "Set3", 
+        draw = TRUE)
+
+unique_counted <- n_distinct(stc$Renamed.Cell.Type)
+print(paste("Total unique cell types:", unique_counted))
+
+```
+```{r}
+#another way to show what was portrayed above with this being the original cell type plot where there is a lot more columns
+ogcelltype_stc |>
+  ggplot(
+    aes(area = n, fill = Original.Cell.Type, label = Original.Cell.Type) 
+  ) +
+  geom_treemap() +
+  geom_treemap_text(color = "white", place = "center", reflow = TRUE) +
+  scale_fill_viridis_d(option = "inferno") +
+  labs(
+    title = "Original Cell Type (Before Standardization)"
+  ) +
+  theme(legend.position = "none")
+```
+```{r}
+# renamed cell type version that shows a reduction in diversity (through standardization)
+renamedcelltype_stc |>
+  ggplot(
+    aes(area = n, fill = Renamed.Cell.Type, label = Renamed.Cell.Type) 
+  ) +
+  geom_treemap() +
+  geom_treemap_text(color = "white", place = "center", reflow = TRUE) +
+  scale_fill_viridis_d(option = "inferno") +
+  labs(
+    title = "Renamed Cell Type"
+  ) +
+  theme(legend.position = "none")
+```
+
+```{r}
+# has the counts for original, renamed, and highlevel cell types
+april_lolli = read.csv("/Users/riahcul/Downloads/040125hickey.csv")
+```
+
+```{r}
+# started to make a lollipop chart but then redirected to another visualization to show the same thing
+april_lolli |> 
+  ggplot(aes(x = reorder(name, -count), y=count)) + 
+  geom_point(size=3) + 
+  geom_segment(aes(x= name, xend=name, y=0, yend = count)) + 
+  labs( 
+    title = "Variation in Disease across Spatial Datasets", 
+    x = "Diseases across Datasets") + 
+  theme_minimal() + 
+  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1), 
+        axis.text.x= element_text(angle=25, vjust=.6))
+```
+```{r}
+celltype_counts = read.csv("/Users/riahcul/Downloads/042025celltype_counts.csv") # dataframe pulled from kylee's directory on DCC
+```
+
+```{r}
+celltype_counts <- celltype_counts %>%
+  mutate(year = str_extract(dataset_name, "^\\d{4}")) # providing year as a colum
+
+# wanted each to be unique dataset and year
+year_study_counts <- celltype_counts |>
+  distinct(dataset_name, year) |>
+  count(year, name = "study_count")
+
+df_bubble <- celltype_counts |>
+  left_join(year_study_counts, by = "year")
+```
+
+```{r}
+# trying to show cell type counts by study year, where color is cell type and size is cell count
+# this wasn't entirely successful, need to change these circles to pie charts - definitely a way to do it
+ggplot(df_bubble, aes(x = year, y = study_count, size = count, color = cell_type)) +
+  geom_point(alpha = 0.7) +
+  scale_size(range = c(3, 20)) +  # control bubble sizes 
+  labs(title = "Cell Type Counts by Study Year",
+       x = "Year of Study",
+       y = "Number of Studies",
+       size = "Cell Count",
+       color = "Cell Type") +
+  theme_minimal() +
+  guides(size = "none")
+
+```
+```{r}
+library(scatterpie)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(janitor)  # for clean_names()
+df_pie <- janitor::clean_names(df_pie)
+
+
+df_pie <- df_bubble %>%
+  pivot_wider(names_from = cell_type, values_from = count, values_fill = 0) %>%
+  group_by(year, study_count) %>%
+  summarize(across(where(is.numeric), sum), .groups = "drop")
+
+scale_factor <- 20
+df_pie$radius <- sqrt(rowSums(df_pie[ , !(names(df_pie) %in% c("year", "study_count"))])) / scale_factor
+
+ggplot() +
+  geom_scatterpie(
+    aes(x = year, y = study_count, r = radius),
+    data = df_pie,
+    cols = setdiff(names(df_pie), c("year", "study_count", "radius"))
+  ) +
+  coord_equal() +
+  theme_minimal() +
+  labs(
+    title = "Cell Type Composition by Study Year",
+    x = "Year of Study",
+    y = "Number of Studies"
+  )
+str(df_pie)
+
+
+```
+```{r}
+library(scatterpie)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(janitor)
+
+# Clean up column names so they're syntactically safe
+df_clean <- janitor::clean_names(df_pie)
+
+# Define which columns are cell types (i.e. not year, study_count, or radius)
+celltype_cols <- setdiff(names(df_clean), c("year", "study_count", "radius"))
+
+# Convert year to numeric if it's currently a character
+df_clean$year <- as.numeric(df_clean$year)
+df_clean$radius <- sqrt(rowSums(df_clean[celltype_cols])) / 25  # or 30, etc.
+
+# Plot
+ggplot() +
+  geom_scatterpie(
+    aes(x = year, y = study_count, r = radius),
+    data = df_clean,
+    cols = celltype_cols
+  ) +
+  coord_equal() +
+  theme_minimal() +
+  labs(
+    title = "Cell Type Composition by Study Year",
+    x = "Year of Study",
+    y = "Number of Studies"
+  )
+
+```
+
+```{r}
+# attempted another graph that shows the change in cell count for each cell type by year of study
+# but there was a huge outlier in epithelial that skewed the y-axis, making the rest hard to see
+ggplot(df_bubble, aes(x = year, y = count, color = cell_type, group = cell_type)) +
+  geom_line(size = 1.2, alpha = 0.8) +  # Line plot with a thicker line
+  geom_point(size = 3, alpha = 0.7) +  # Add points to show data points
+  labs(title = "Cell Type Counts by Study Year",
+       x = "Year of Study",
+       y = "Cell Count",
+       color = "Cell Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  # Rotate x-axis labels
+  scale_color_viridis_d()  # Use color palette for better differentiation
+```
+
+```{r}
+# creating a match indicator where 0 means the original cell type and renamed is the same and 1 when they are different
+analysis_stc <- stc |>
+  mutate(match_indicator = ifelse(Original.Cell.Type == Renamed.Cell.Type, 0, 1),
+         dataset_id = as.numeric(factor(o))) 
+
+# calculating the "mean" to get the proportions right for ordering
+# able to do this because the values are just 0 and 1
+match_props <- analysis_stc |>
+  group_by(dataset_id) |>
+  summarize(match_prop = mean(match_indicator))
+
+# joining these together to use the match proportions
+analysis_stc <- analysis_stc |>
+  left_join(match_props, by = "dataset_id") |>
+  mutate(
+    dataset_id = fct_reorder(factor(dataset_id), match_prop)
+  )
+
+# graphing a waterfall plot, representing the percentage of renamed cell types in each dataset
+analysis_stc |>
+  ggplot(
+    aes(x = dataset_id, fill = factor(match_indicator))
+  ) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Representation of Renamed Cell Types in Each Dataset",
+    x = "Datasets",
+    y = "Percentage",
+    fill = "Match Indicator"
+  ) +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks = element_blank()) +
+scale_fill_manual(
+  name = "",  # legend title
+  labels = c("Original", "Renamed"),
+  values = c("0" = "#A6CEE3", "1" = "#1F78B4")
+)
+
+ggsave("plot.png", width = 12, height = 8)
+```
+
+
+
+```{r}
+# alluvial plot showing a transition between original and renamed
+# might be interesting to do this with the 13 final cell types instead?
+library(ggalluvial)
+
+top_flows <- stc %>%
+  count(Original.Cell.Type, Renamed.Cell.Type, sort = TRUE)
+
+filtered_flows <- top_flows %>%
+  filter(n > 5)
+
+ggplot(filtered_flows,
+       aes(axis1 = Original.Cell.Type, axis2 = Renamed.Cell.Type, y = n)) +
+  geom_alluvium(aes(fill = Renamed.Cell.Type), width = 1/12) +
+  geom_stratum(width = 1/12, fill = "white", color = "black") +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum))) +
+  theme_minimal() +
+  labs(title = "Cell Type Renaming Flow",
+       y = "Count",
+       x = NULL) +
+  theme(legend.position = "none",
+        axis.text.x = element_blank())
+
+ggsave("plot.png", width = 14, height = 10)
+```
+
+
+```{r}
+# showing the number of studies per cell type
+# done by summing the study count and then breaking these counts up by cell type
+cell_type_counts <- df_bubble %>%
+  group_by(cell_type) %>%
+  summarize(study_total = sum(study_count), .groups = "drop")
+
+# donut chart
+fig <- plot_ly(cell_type_counts,
+               labels = ~cell_type,
+               values = ~study_total,
+               type = 'pie',
+               hole = 0.5,
+               textinfo = 'label+value+percent') %>%
+  layout(title = "Number of Studies per Cell Type")
+
+fig
+```
+
+```{r}
+# number of studies with each cell type by study count and not study total
+library(plotly)
+cell_type_study_count <- df_bubble |>
+  distinct(cell_type, dataset_name) |>
+  count(cell_type, name = "study_count")
+
+plot_ly(cell_type_study_count,
+        labels = ~cell_type,
+        values = ~study_count,
+        type = 'pie',
+        hole = 0.5,
+        textinfo = 'label+value+percent') |>
+  layout(title = "Number of Studies Each Cell Type Appears In")
+
+```
+```{r}
+library(ggplot2)
+
+# Create a dataframe with the blocks
+blocks <- data.frame(
+  xmin = c(0, 0, 0, 0, 0, 3),
+  xmax = c(7, 6, 3, 3, 2.5, 3),
+  ymin = c(5, 4, 3, 2, 1, 1),
+  ymax = c(6, 5, 4, 3, 2, 2),
+  label = c("Datasets (70)", "Labeled single cell (58)", "Metadata file added (37)", "Emailed for needed\ninformation (6)", "Responded (5)", "Can’t use (1)"),
+  fill = c("#c6d9f0", "#c6efce", "#c6efce", "#c6efce", "#c6efce", "#f4cccc")
+)
+
+# Add pink side blocks
+blocks <- rbind(
+  blocks,
+  data.frame(
+    xmin = c(6, 3),
+    xmax = c(7, 6),
+    ymin = c(4, 3),
+    ymax = c(5, 4),
+    label = c("Unlabeled (12)", "No metadata (33)"),
+    fill = c("#f4cccc", "#f4cccc")
+  )
+)
+
+# Plot
+ggplot() +
+  geom_rect(data = blocks, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = fill), color = "black") +
+  scale_fill_identity() +
+  geom_text(data = blocks, aes(x = (xmin + xmax)/2, y = (ymin + ymax)/2, label = label), size = 4) +
+  annotate("text", x = 1.5, y = 0.5, label = "Datasets included downstream", hjust = 0, size = 4) +
+  annotate("segment", x = 0, xend = 3, y = 0.6, yend = 0.6, size = 0.5) +
+  theme_void()
+
+```
