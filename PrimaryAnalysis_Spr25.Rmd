@@ -349,6 +349,62 @@ treemap(uniqueregion_freqs,
 
 ```
 ```{r}
+celltype_freqs <- celltype_freqs |>
+  drop_na(celltype_col_name)
+
+treemap(celltype_freqs, 
+        index = "celltype_col_name", 
+        vSize = "Frequency", 
+        vColor = "Frequency", 
+        palette = "Pastel1",
+        title = "Cell Type Name Diversity in Spatial Datasets", 
+        range = c(1, 7),
+        draw = TRUE)
+
+mycolors <- paletteer_c("ggthemes::Blue-Green Sequential", 3)
+
+celltype_freqs <- celltype_freqs |>
+  mutate(freq_group = case_when(
+    Frequency >= 5 ~ ">= 5",
+    Frequency < 5 & Frequency > 2 ~ "2-4",
+    Frequency <= 2 ~ "<= 2"
+  ))
+
+# tissue_counts <- na.omit(tissue_counts)
+# 
+# treemap(tissue_counts, 
+#         index = c("freq_group", "tissue_split"), 
+#         vSize = "Frequency", 
+#         #vColor = "mycolors", 
+#         type = "index",
+#         fontsize.labels = 9,
+#         title = "Representation of Tissue Types by Frequency in Spatial Datasets - intestine & intestines",
+#         palette = mycolors, 
+#        drop.unused.levels = FALSE,
+#         fontface.labels = 1,
+#         sortID = "size",
+#         na.color = TRUE,
+#         draw = TRUE)
+```
+```{r}
+#png(filename="tree.png",width=1600, height=1200, res = 300)
+pdf("tree.pdf", width = 10, height = 8)
+
+treemap(celltype_freqs, 
+        index = "celltype_col_name", 
+        vSize = "Frequency", 
+        vColor = "Frequency", 
+        palette = "Paired",
+        type = "value",
+        title = "Cell Type Name Diversity in Spatial Datasets", 
+        range = c(1, 7),
+        draw = TRUE)
+
+dev.off()
+
+```
+
+```{r}
 # making pie charts to check various columns in locsofspatialdata
 
 # this creates a dataframe stating whether or not the metadata was added for each dataset
@@ -1087,6 +1143,7 @@ theme_classic() +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1)  # Slant the x-axis labels
   )
+
 ```
 ```{r}
 # creating a dataframe that just has the original cell types
@@ -1436,4 +1493,66 @@ ggplot() +
 
 ```
 
+```{r}
+#pdf("scatter.pdf", width = 10, height = 8)
+
+# use scatterpie for this one!
+
+# ggplot(df_bubble, aes(x = year, y = study_count, size = count, color = cell_type)) +
+#   geom_point(alpha = 0.7) +
+#   scale_size(range = c(3, 20)) +  # control bubble sizes 
+#   labs(title = "Cell Type Counts by Study Year",
+#        x = "Year of Study",
+#        y = "Number of Studies",
+#        size = "Cell Count",
+#        color = "Cell Type") +
+#   theme_minimal() +
+#   guides(size = "none")
+
+# radius = size = count
+# g <- df_bubble |>
+#   ggplot(
+#     aes(year, study_count)
+#   )
+# 
+# g + geom_scatterpie(
+#   aes(x = year, y = study_count, group = )
+# )
+
+library(tidyr)
+library(dplyr)
+
+df_wide <- df_bubble |>
+  pivot_wider(names_from = cell_type, values_from = count, values_fill = 0)
+
+cell_type_cols <- df_wide |>
+  select(B:Epithelial) |>
+  colnames()
+
+df_wide <- df_wide |>
+  mutate(
+    total_count = rowSums(across(all_of(cell_type_cols))),
+    radius = sqrt(total_count) / max(sqrt(total_count)) * 3  # scale to fit
+  )
+
+n <- nrow(df_wide)
+df_wide$year <- as.numeric(df_wide$year)
+
+
+# Optionally standardize the total count (e.g., divide by max total_count)
+#df_wide$scaled_size <- df_wide$total_count / max(df_wide$total_count) * 100  # Adjust the factor (10) as needed
+
+
+ggplot(data = df_bubble) +
+  geom_scatterpie(
+    aes(x = year, y = study_count, group = dataset_name, r = 0.00035*count), cols = cell_type, color = NA,
+    long_format = TRUE,
+  ) + coord_equal() +
+  theme_minimal() #+
+  #geom_scatterpie_legend(df_wide$radius, x = 2017.5, y = max(df_wide$study_count) + 1)
+
+#g + geom_scatterpie_legend(df_wide$radius, x= 2018, y = 1)
+
+
+```
 
