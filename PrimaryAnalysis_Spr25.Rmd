@@ -1122,7 +1122,6 @@ treemap(epi_stc,
 ```
 
 ```{r}
-# FIGURE 1
 # closer to final iteration of the same modality, large tissue unit frequency chart
 # except this time, it is grouped by large tissue unit instead of tissue
 
@@ -1145,6 +1144,37 @@ theme_classic() +
   )
 
 ```
+```{r}
+# FIGURE 1
+# collapsed_df <- tis_modal_viz |>
+#   group_by(large_tissue_unit, modality) |>
+#   summarise(Frequency = sum(Frequency, na.rm = TRUE), .groups = "drop")
+
+collapsed_df <- tis_modal_viz |>
+  group_by(large_tissue_unit, modality) |>
+  summarize(Frequency = sum(Frequency), .groups = "drop") |>
+  group_by(large_tissue_unit) |>
+  mutate(total_Freq = sum(Frequency)) |>
+  ungroup()
+
+
+collapsed_df |>
+    filter(!(is.na(modality))) |>
+   mutate(large_tissue_unit = fct_reorder(large_tissue_unit, desc(total_Freq))) |> 
+  ggplot(
+    aes(x = large_tissue_unit, y = Frequency, fill = modality)
+  ) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = col_vector)+
+theme_classic() +
+  labs(
+    title = "Large Tissue Units within Locations of Spatial by Modality",
+    x = "Large Tissue Unit") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Slant the x-axis labels
+  )
+```
+
 ```{r}
 # creating a dataframe that just has the original cell types
 # treemap that shows the diversity and clutter
@@ -1235,6 +1265,10 @@ april_lolli |>
 ```
 ```{r}
 celltype_counts = read.csv("/Users/riahcul/Downloads/042025celltype_counts.csv") # dataframe pulled from kylee's directory on DCC
+
+celltype_counts <- celltype_counts |>
+  mutate(cell_type = if_else(cell_type == "Epithelial Tumor", "Epithelial", cell_type))
+
 ```
 
 ```{r}
@@ -1273,9 +1307,10 @@ library(ggplot2)
 library(janitor)  # for clean_names()
 df_pie <- janitor::clean_names(df_pie)
 
+names(df_bubble)
 
 df_pie <- df_bubble %>%
-  pivot_wider(names_from = cell_type, values_from = count, values_fill = 0) %>%
+  pivot_wider(names_from = cell_type, values_from = count, values_fill = list(count = 0)) %>%
   group_by(year, study_count) %>%
   summarize(across(where(is.numeric), sum), .groups = "drop")
 
@@ -1477,7 +1512,7 @@ blocks <- rbind(
     xmax = c(7, 6),
     ymin = c(4, 3),
     ymax = c(5, 4),
-    label = c("Unlabeled (12)", "No metadata (33)"),
+    label = c("Unlabeled (12)", "No metadata file added (21)", "No metadata file added (12)"),
     fill = c("#f4cccc", "#f4cccc")
   )
 )
@@ -1499,15 +1534,15 @@ ggplot() +
 # use scatterpie for this one!
 
 # ggplot(df_bubble, aes(x = year, y = study_count, size = count, color = cell_type)) +
-#   geom_point(alpha = 0.7) +
-#   scale_size(range = c(3, 20)) +  # control bubble sizes 
-#   labs(title = "Cell Type Counts by Study Year",
+# geom_point(alpha = 0.7) +
+# scale_size(range = c(3, 20)) +  # control bubble sizes 
+# labs(title = "Cell Type Counts by Study Year",
 #        x = "Year of Study",
-#        y = "Number of Studies",
-#        size = "Cell Count",
-#        color = "Cell Type") +
-#   theme_minimal() +
-#   guides(size = "none")
+#         y = "Number of Studies",
+#         size = "Cell Count",
+#         color = "Cell Type") +
+#    theme_minimal() +
+#    guides(size = "none")
 
 # radius = size = count
 # g <- df_bubble |>
@@ -1522,8 +1557,26 @@ ggplot() +
 library(tidyr)
 library(dplyr)
 
-df_wide <- df_bubble |>
-  pivot_wider(names_from = cell_type, values_from = count, values_fill = 0)
+cell_type_colors <- c(
+  'B' = '#1f77b4',
+  'CD4+ T'= '#aec7e8',
+    'CD8+ T'= '#ff7f0e',
+    'Endothelial'= '#ffbb78',
+    'Epithelial'= '#2ca02c',
+    'Immune'= '#98df8a',
+    'Lymphocyte'= '#d62728',
+    'Macrophage'= '#ff9896',
+    'Myeloid'= '#9467bd',
+    'Stromal'= '#c5b0d5',
+    'T'= '#8c564b',
+    'Undefined'= '#c49c94'
+)
+df_bubble_summary <- df_bubble |>
+  group_by(dataset_name, year, cell_type, study_count) |>
+  summarize(count = sum(count), .groups = 'drop')
+
+df_wide <- df_bubble_summary |>
+  pivot_wider(names_from = cell_type, values_from = count, values_fill = list(count = 0))
 
 cell_type_cols <- df_wide |>
   select(B:Epithelial) |>
@@ -1531,9 +1584,22 @@ cell_type_cols <- df_wide |>
 
 df_wide <- df_wide |>
   mutate(
-    total_count = rowSums(across(all_of(cell_type_cols))),
-    radius = sqrt(total_count) / max(sqrt(total_count)) * 3  # scale to fit
+    total_count = rowSums(across(all_of(cell_type_cols))) # scale to fit
   )
+
+df_wide <- df_wide |>
+  group_by(study_count) |>
+  mutate(total_count_study = sum(total_count)) |>
+  ungroup()
+
+df_wide <- df_wide |>
+  group_by(study_count) |>
+  mutate(
+    #radius = sqrt(total_count) / max(sqrt(total_count))
+   #radius = sqrt(total_count_study) / max(sqrt(total_count_study)),
+    scaled_radius = sqrt(total_count)/max(total_count)*3# scale to 3 within group
+  ) |>
+  ungroup()
 
 n <- nrow(df_wide)
 df_wide$year <- as.numeric(df_wide$year)
@@ -1543,11 +1609,12 @@ df_wide$year <- as.numeric(df_wide$year)
 #df_wide$scaled_size <- df_wide$total_count / max(df_wide$total_count) * 100  # Adjust the factor (10) as needed
 
 
-ggplot(data = df_bubble) +
+ggplot(data = df_wide) +
   geom_scatterpie(
-    aes(x = year, y = study_count, group = dataset_name, r = 0.00035*count), cols = cell_type, color = NA,
-    long_format = TRUE,
-  ) + coord_equal() +
+    aes(x = year, y = study_count, group = dataset_name, r = 1), cols = cell_type_cols, color = NA
+  ) + 
+  scale_fill_manual(values = cell_type_colors) +
+  coord_equal() +
   theme_minimal() #+
   #geom_scatterpie_legend(df_wide$radius, x = 2017.5, y = max(df_wide$study_count) + 1)
 
@@ -1555,4 +1622,194 @@ ggplot(data = df_bubble) +
 
 
 ```
+```{r plot_wider, fig.width=12, fig.height=6}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(ggforce)  # for geom_scatterpie
 
+# Define color palette
+cell_type_colors <- c(
+  'B' = '#1f77b4',
+  'CD4_T'= '#aec7e8',
+  'CD8_T'= '#ff7f0e',
+  'Endothelial'= '#ffbb78',
+  'Epithelial'= '#2ca02c',
+  'Immune'= '#98df8a',
+  'Lymphocyte'= '#d62728',
+  'Macrophage'= '#ff9896',
+  'Myeloid'= '#9467bd',
+  'Stromal'= '#c5b0d5',
+  'T'= '#8c564b',
+  'Undefined'= '#c49c94'
+)
+
+# Assume df_wide is already like the one you pasted
+# Make sure all expected columns are present
+required_cols <- names(cell_type_colors)
+missing_cols <- setdiff(required_cols, names(df_wide))
+df_wide[missing_cols] <- 0  # Fill any missing cell types with zeros
+
+# Set column order for plotting
+cell_type_cols <- required_cols  # now we know all exist
+
+# Convert year to numeric (already done but safe)
+df_wide$year <- as.numeric(df_wide$year)
+
+df_wide$radius <- sqrt(df_wide$total_count) / max(sqrt(df_wide$total_count), na.rm = TRUE) * 5  # or 10, depending on your plot size
+
+# Plot
+ggplot(data = df_wide) +
+  geom_scatterpie(
+    aes(y = year, x = study_count, group = dataset_name, r = radius),
+    cols = cell_type_cols,
+    color = NA
+  ) +
+  scale_fill_manual(values = cell_type_colors, drop = FALSE) +
+  coord_equal() +
+  theme_minimal() +
+  labs(
+    title = "Cell Type Composition by Dataset and Year",
+    y = "Year",
+    x = "Dataset Count by Year"
+  )
+
+```
+```{r}
+
+sqrt_counts <- sqrt(df_wide$total_count)
+print(sqrt_counts)
+print(max(sqrt_counts, na.rm = TRUE))
+
+```
+```{r}
+df_grouped <- df_wide |>
+  group_by(study_count) |>
+  summarize(
+    B = sum(B, na.rm = TRUE),
+    CD4_T = sum(CD4_T, na.rm = TRUE),
+    CD8_T = sum(CD8_T, na.rm = TRUE),
+    Endothelial = sum(Endothelial, na.rm = TRUE),
+    Epithelial = sum(Epithelial, na.rm = TRUE),
+    Immune = sum(Immune, na.rm = TRUE),
+    Lymphocyte = sum(Lymphocyte, na.rm = TRUE),
+    Macrophage = sum(Macrophage, na.rm = TRUE),
+    Myeloid = sum(Myeloid, na.rm = TRUE),
+    Stromal = sum(Stromal, na.rm = TRUE),
+    T = sum(T, na.rm = TRUE),
+    Undefined = sum(Undefined, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+df_grouped <- df_grouped |>
+  mutate(
+    total_count = rowSums(across(B:Undefined), na.rm = TRUE)
+  )
+
+study_years <- tibble(
+  year = c(2018, 2020, 2021, 2022, 2023, 2024),
+  study_count = c(1, 2, 7, 13, 14, 20)
+)
+
+df_grouped <- df_grouped |>
+  left_join(study_years, by = "study_count")
+
+df_grouped <- df_grouped |>
+  mutate(
+    #radius = sqrt(log(total_count + 1))/max(sqrt(log(total_count + 1))) 
+    radius = sqrt(total_count)/max(sqrt(total_count)), 
+    study_count_scale = study_count * 2
+  )
+
+ggplot(data = df_grouped) +
+  geom_scatterpie(
+    aes(x = year, y = study_count, r = radius * 2),
+    cols = names(cell_type_colors),
+    color = "black", size = .1, alpha = .8) + 
+  scale_fill_manual(name = "Cell Type", values = cell_type_colors, drop = FALSE) +
+  # coord_cartesian() +
+ # coord_fixed(ratio = 1/2, xlim = NULL, ylim = NULL, expand = TRUE, clip = "on") +
+   theme_minimal() +
+   labs(
+     title = "Cell Type Composition by Dataset and Year",
+    x = "Year",
+     y = "Dataset Count by Year"
+   )+
+  theme_minimal() +
+  theme(
+    panel.background = element_blank(),  # Remove background color
+    plot.background = element_blank(),   # Remove outer plot background
+    axis.line = element_blank(),         # Remove axis lines
+    axis.ticks = element_blank(),        # Remove axis ticks
+    panel.grid = element_blank()         # Remove gridlines
+  ) +
+   scale_x_continuous(
+     breaks = seq(2017, 2025, by = 1),    # One break per year
+     expand = expansion(mult = c(0.1, 0.1))  # Add 10% padding on both sides
+   )
+```
+
+```{r}
+# plot_wider, fig.width=10, fig.height=4
+ggplot(data = df_wide) +
+  geom_scatterpie(
+    aes(x = year, y = study_count, group = dataset_name, r = 1),
+    cols = cell_type_cols,
+    color = NA
+  ) +
+  scale_fill_manual(values = cell_type_colors, drop = FALSE) +
+  coord_equal() +
+  theme_minimal() +
+  labs(
+    title = "Cell Type Composition by Dataset and Year",
+    x = "Year",
+    y = "Study Count by Year"
+  )
+```
+
+```{r}
+library(ggplot2)
+
+# Define block data
+blocks <- data.frame(
+  xmin = c(0, 0, 58, 0, 37, 58, 37, 42, 45, 49, 37, 42, 45, 49, 0, 37),
+  xmax = c(60, 58, 60, 37, 58, 60, 42, 45, 49, 58, 39, 45, 46, 58, 60, 58),
+  ymin = c(5, 4, 4, 3, 3, 3, 2, 2, 2, 2, 1, 1, 1, 1, 0, 0),
+  ymax = c(6, 5, 5, 4, 4, 4, 3, 3, 3, 3, 2, 2, 2, 2, 1, 1),
+  label = c(
+    "Collected Datasets\n(60)",
+    "Labeled single cell\n(58)",
+    "Unlabeled\n(2)",
+    "Metadata file added\n(37)",
+    "No metadata file added\n(21)",
+    "No metadata file added\n(2)",
+    "Emailed for spatial & metadata\n(5)",
+    "Emailed for spatial data\n(3)",
+    "Emailed for metadata\n(4)",
+    "No metadata file added/\nNeed to email\n(11)",
+    "Received spatial and metadata\n(2)",
+    "Received spatial data\n(3)",
+    "Received metadata\n(1)",
+    "Didn't receive data\n(2)\nHaven't received yet TBD (4)",
+    "Not usable datasets\n(17)",
+    "Usable datasets\n(43)"
+  ),
+  fill = c(
+    "lightblue", 
+    "lightgreen", "lightpink",
+    "seagreen4", "lightpink", "lightpink",
+    "gray60", "gray60", "gray60", "lightpink",
+    "lightgreen", "lightgreen", "lightgreen", "lightpink",
+    "lightpink", "seagreen"
+  )
+)
+
+# Create plot
+ggplot(blocks) +
+  geom_rect(aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = fill), color = "black") +
+  geom_text(aes(x = (xmin + xmax)/2, y = (ymin + ymax)/2, label = label), size = 3, lineheight = 0.9) +
+  scale_fill_identity() +
+  theme_void() +
+  theme(panel.background = element_rect(fill = "white", color = NA))
+
+```
