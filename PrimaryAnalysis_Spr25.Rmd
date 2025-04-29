@@ -352,16 +352,30 @@ treemap(uniqueregion_freqs,
 celltype_freqs <- celltype_freqs |>
   drop_na(celltype_col_name)
 
+celltype_freqs <- celltype_freqs |>
+  mutate(celltype_col_name = ifelse(celltype_col_name == "anno905_ingested.cell.types", "anno905_\ningested.\ncell.types", celltype_col_name),
+         celltype_col_name = ifelse(celltype_col_name == "cell_type_annotation", "cell_type_\nannotation", celltype_col_name),
+         celltype_col_name = ifelse(celltype_col_name == "final_cell_types_v2", "final_cell_\ntypes_v2", celltype_col_name),
+         celltype_col_name = ifelse(celltype_col_name == "metacluster_label", "metacluster_\nlabel", celltype_col_name),
+         celltype_col_name = ifelse(celltype_col_name == "metacluster_name", "metacluster_\nname", celltype_col_name),
+         celltype_col_name = ifelse(celltype_col_name == "final_cell_type", "final_cell_\ntype", celltype_col_name),
+         celltype_col_name = ifelse(celltype_col_name == "cell_subtype2", "cell_\nsubtype2", celltype_col_name))
+
+mycolors <- paletteer_c("grDevices::Purple-Yellow", 8)
+
 treemap(celltype_freqs, 
         index = "celltype_col_name", 
         vSize = "Frequency", 
         vColor = "Frequency", 
-        palette = "Pastel1",
+        type = "value",
+        palette = mycolors, #"Pastel1",
         title = "Cell Type Name Diversity in Spatial Datasets", 
         range = c(1, 7),
+        fontsize.labels = 12,
+        lowerbound.cex.labels = 0,
+        overlap.labels = 0,
         draw = TRUE)
 
-mycolors <- paletteer_c("ggthemes::Blue-Green Sequential", 3)
 
 celltype_freqs <- celltype_freqs |>
   mutate(freq_group = case_when(
@@ -1307,30 +1321,30 @@ library(ggplot2)
 library(janitor)  # for clean_names()
 df_pie <- janitor::clean_names(df_pie)
 
-names(df_bubble)
-
-df_pie <- df_bubble %>%
-  pivot_wider(names_from = cell_type, values_from = count, values_fill = list(count = 0)) %>%
-  group_by(year, study_count) %>%
-  summarize(across(where(is.numeric), sum), .groups = "drop")
-
-scale_factor <- 20
-df_pie$radius <- sqrt(rowSums(df_pie[ , !(names(df_pie) %in% c("year", "study_count"))])) / scale_factor
-
-ggplot() +
-  geom_scatterpie(
-    aes(x = year, y = study_count, r = radius),
-    data = df_pie,
-    cols = setdiff(names(df_pie), c("year", "study_count", "radius"))
-  ) +
-  coord_equal() +
-  theme_minimal() +
-  labs(
-    title = "Cell Type Composition by Study Year",
-    x = "Year of Study",
-    y = "Number of Studies"
-  )
-str(df_pie)
+# names(df_bubble)
+# 
+# df_pie <- df_bubble %>%
+#   pivot_wider(names_from = cell_type, values_from = count, values_fill(count = 0) %>%
+#   group_by(year, study_count) %>%
+#   summarize(across(where(is.numeric), sum), .groups = "drop")
+# 
+# scale_factor <- 20
+# df_pie$radius <- sqrt(rowSums(df_pie[ , !(names(df_pie) %in% c("year", "study_count"))])) / scale_factor
+# 
+# ggplot() +
+#   geom_scatterpie(
+#     aes(x = year, y = study_count, r = radius),
+#     data = df_pie,
+#     cols = setdiff(names(df_pie), c("year", "study_count", "radius"))
+#   ) +
+#   coord_equal() +
+#   theme_minimal() +
+#   labs(
+#     title = "Cell Type Composition by Study Year",
+#     x = "Year of Study",
+#     y = "Number of Studies"
+#   )
+# str(df_pie)
 
 
 ```
@@ -1495,36 +1509,36 @@ plot_ly(cell_type_study_count,
 library(ggplot2)
 
 # Create a dataframe with the blocks
-blocks <- data.frame(
-  xmin = c(0, 0, 0, 0, 0, 3),
-  xmax = c(7, 6, 3, 3, 2.5, 3),
-  ymin = c(5, 4, 3, 2, 1, 1),
-  ymax = c(6, 5, 4, 3, 2, 2),
-  label = c("Datasets (70)", "Labeled single cell (58)", "Metadata file added (37)", "Emailed for needed\ninformation (6)", "Responded (5)", "Can’t use (1)"),
-  fill = c("#c6d9f0", "#c6efce", "#c6efce", "#c6efce", "#c6efce", "#f4cccc")
-)
-
-# Add pink side blocks
-blocks <- rbind(
-  blocks,
-  data.frame(
-    xmin = c(6, 3),
-    xmax = c(7, 6),
-    ymin = c(4, 3),
-    ymax = c(5, 4),
-    label = c("Unlabeled (12)", "No metadata file added (21)", "No metadata file added (12)"),
-    fill = c("#f4cccc", "#f4cccc")
-  )
-)
-
-# Plot
-ggplot() +
-  geom_rect(data = blocks, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = fill), color = "black") +
-  scale_fill_identity() +
-  geom_text(data = blocks, aes(x = (xmin + xmax)/2, y = (ymin + ymax)/2, label = label), size = 4) +
-  annotate("text", x = 1.5, y = 0.5, label = "Datasets included downstream", hjust = 0, size = 4) +
-  annotate("segment", x = 0, xend = 3, y = 0.6, yend = 0.6, size = 0.5) +
-  theme_void()
+# blocks <- data.frame(
+#   xmin = c(0, 0, 0, 0, 0, 3),
+#   xmax = c(7, 6, 3, 3, 2.5, 3),
+#   ymin = c(5, 4, 3, 2, 1, 1),
+#   ymax = c(6, 5, 4, 3, 2, 2),
+#   label = c("Datasets (70)", "Labeled single cell (58)", "Metadata file added (37)", "Emailed for needed\ninformation (6)", "Responded (5)", "Can’t use (1)"),
+#   fill = c("#c6d9f0", "#c6efce", "#c6efce", "#c6efce", "#c6efce", "#f4cccc")
+# )
+# 
+# # Add pink side blocks
+# blocks <- rbind(
+#   blocks,
+#   data.frame(
+#     xmin = c(6, 3),
+#     xmax = c(7, 6),
+#     ymin = c(4, 3),
+#     ymax = c(5, 4),
+#     label = c("Unlabeled (12)", "No metadata file added (21)", "No metadata file added (12)"),
+#     fill = c("#f4cccc", "#f4cccc")
+#   )
+# )
+# 
+# # Plot
+# ggplot() +
+#   geom_rect(data = blocks, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = fill), color = "black") +
+#   scale_fill_identity() +
+#   geom_text(data = blocks, aes(x = (xmin + xmax)/2, y = (ymin + ymax)/2, label = label), size = 4) +
+#   annotate("text", x = 1.5, y = 0.5, label = "Datasets included downstream", hjust = 0, size = 4) +
+#   annotate("segment", x = 0, xend = 3, y = 0.6, yend = 0.6, size = 0.5) +
+#   theme_void()
 
 ```
 
@@ -1631,8 +1645,8 @@ library(ggforce)  # for geom_scatterpie
 # Define color palette
 cell_type_colors <- c(
   'B' = '#1f77b4',
-  'CD4_T'= '#aec7e8',
-  'CD8_T'= '#ff7f0e',
+  'CD4+ T'= '#aec7e8',
+  'CD8+ T'= '#ff7f0e',
   'Endothelial'= '#ffbb78',
   'Epithelial'= '#2ca02c',
   'Immune'= '#98df8a',
@@ -1687,8 +1701,8 @@ df_grouped <- df_wide |>
   group_by(study_count) |>
   summarize(
     B = sum(B, na.rm = TRUE),
-    CD4_T = sum(CD4_T, na.rm = TRUE),
-    CD8_T = sum(CD8_T, na.rm = TRUE),
+    `CD4+ T` = sum(`CD4+ T`, na.rm = TRUE),
+    `CD8+ T` = sum(`CD8+ T`, na.rm = TRUE),
     Endothelial = sum(Endothelial, na.rm = TRUE),
     Epithelial = sum(Epithelial, na.rm = TRUE),
     Immune = sum(Immune, na.rm = TRUE),
@@ -1723,13 +1737,19 @@ df_grouped <- df_grouped |>
 
 ggplot(data = df_grouped) +
   geom_scatterpie(
-    aes(x = year, y = study_count, r = radius * 2),
+    aes(x = year, y = study_count, r = radius * 5),
     cols = names(cell_type_colors),
-    color = "black", size = .1, alpha = .8) + 
+    color = "black", size = .05, alpha = .75) + 
   scale_fill_manual(name = "Cell Type", values = cell_type_colors, drop = FALSE) +
-  # coord_cartesian() +
+   scale_x_continuous(
+     breaks = seq(2018, 2024, by = 1),    # One break per year
+     expand = expansion(mult = c(0.1, 0.1))  # Add 10% padding on both sides
+   ) +
+  # geom_scatterpie_legend(seq(1, ceiling(max(df_grouped$total_count)/10000000), length = 4),
+  #                        x = 2017, y = 0, labeller = function(x) x * 10000) +
+  coord_equal() +
+  # coord_fixed(ratio = 1, expand = TRUE) +
  # coord_fixed(ratio = 1/2, xlim = NULL, ylim = NULL, expand = TRUE, clip = "on") +
-   theme_minimal() +
    labs(
      title = "Cell Type Composition by Dataset and Year",
     x = "Year",
@@ -1742,11 +1762,9 @@ ggplot(data = df_grouped) +
     axis.line = element_blank(),         # Remove axis lines
     axis.ticks = element_blank(),        # Remove axis ticks
     panel.grid = element_blank()         # Remove gridlines
-  ) +
-   scale_x_continuous(
-     breaks = seq(2017, 2025, by = 1),    # One break per year
-     expand = expansion(mult = c(0.1, 0.1))  # Add 10% padding on both sides
-   )
+  ) 
+
+ggsave(file = "howdy.pdf", width = 10, height = 10)
 ```
 
 ```{r}
@@ -1807,9 +1825,23 @@ blocks <- data.frame(
 # Create plot
 ggplot(blocks) +
   geom_rect(aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = fill), color = "black") +
-  geom_text(aes(x = (xmin + xmax)/2, y = (ymin + ymax)/2, label = label), size = 3, lineheight = 0.9) +
+  geom_text(aes(x = (xmin + xmax)/2, y = (ymin + ymax)/2, label = label), size = 3, lineheight = 1.3) +
   scale_fill_identity() +
   theme_void() +
   theme(panel.background = element_rect(fill = "white", color = NA))
 
 ```
+```{r}
+library(WeightedTreemaps)
+tm <- voronoiTreemap(
+  data = celltype_freqs,
+  levels = "celltype_col_name",
+  cell_size = "Frequency",
+  shape = "rounded_rect",
+  seed = 123,
+  positioning = "clustered"
+)
+
+drawTreemap(tm, title = "Cell Type yurd", label_size = 2.1, color_type = "categorical", color_level = 1, border_size = 1, label_color = "white")
+```
+
