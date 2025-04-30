@@ -1061,6 +1061,7 @@ narrow_age_md |>
   scale_fill_manual(values = c("#A3C4DC", "#FFD3B6", "#A8E6CF"),
                     na.value = "#A8E6CF") +
   theme_minimal() 
+ggsave("plot.png", width = 12, height = 8)
 ```
 ```{r}
 stc = read.csv("/Users/riahcul/Downloads/studytocell.csv") # study to cell csv (original and renamed cell type)
@@ -1187,6 +1188,7 @@ theme_classic() +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1)  # Slant the x-axis labels
   )
+ggsave("plot.png", width = 11, height = 9)
 ```
 
 ```{r}
@@ -1429,16 +1431,13 @@ analysis_stc |>
     y = "Percentage",
     fill = "Match Indicator"
   ) +
-  theme(
-    axis.text.x = element_blank(),
-    axis.ticks = element_blank()) +
 scale_fill_manual(
   name = "",  # legend title
   labels = c("Original", "Renamed"),
   values = c("0" = "#A6CEE3", "1" = "#1F78B4")
 )
 
-ggsave("plot.png", width = 12, height = 8)
+ggsave("plot.png", width = 11, height = 9)
 ```
 
 
@@ -1714,6 +1713,7 @@ df_grouped <- df_wide |>
     Undefined = sum(Undefined, na.rm = TRUE),
     .groups = "drop"
   )
+library(tidyr)
 
 df_grouped <- df_grouped |>
   mutate(
@@ -1721,9 +1721,10 @@ df_grouped <- df_grouped |>
   )
 
 study_years <- tibble(
-  year = c(2018, 2020, 2021, 2022, 2023, 2024),
-  study_count = c(1, 2, 7, 13, 14, 20)
+  year = c(2018, 2019, 2020, 2021, 2022, 2023, 2024),
+  study_count = c(1, 0, 2, 7, 13, 14, 20)
 )
+
 
 df_grouped <- df_grouped |>
   left_join(study_years, by = "study_count")
@@ -1734,27 +1735,44 @@ df_grouped <- df_grouped |>
     radius = sqrt(total_count)/max(sqrt(total_count)), 
     study_count_scale = study_count * 2
   )
+study_spacing_factor <- 10
+year_spacing_factor <- 40  # or 10 or 20 to make it even more spread out
+df_grouped <- df_grouped |> 
+  mutate(year_stretched = (year - min(year)) * year_spacing_factor + min(year),
+         study_count_stretched = study_count * study_spacing_factor
+         )
 
 ggplot(data = df_grouped) +
   geom_scatterpie(
-    aes(x = year, y = study_count, r = radius * 5),
+    aes(x = year_stretched, y = study_count_stretched, r = radius * 40),
     cols = names(cell_type_colors),
-    color = "black", size = .05, alpha = .75) + 
+    color = "black", size = 0) + 
   scale_fill_manual(name = "Cell Type", values = cell_type_colors, drop = FALSE) +
-   scale_x_continuous(
-     breaks = seq(2018, 2024, by = 1),    # One break per year
-     expand = expansion(mult = c(0.1, 0.1))  # Add 10% padding on both sides
-   ) +
+  scale_x_continuous(
+  breaks = (2018:2024 - min(2018:2024)) * year_spacing_factor + min(df_grouped$year_stretched),
+  labels = 2018:2024,
+  expand = expansion(mult = c(0.2, 0.2))
+
+    # breaks = df_grouped$year_stretched,
+    # labels = df_grouped$year,   # Show the real year labels
+    # expand = expansion(mult = c(0.2, 0.2))  
   # geom_scatterpie_legend(seq(1, ceiling(max(df_grouped$total_count)/10000000), length = 4),
   #                        x = 2017, y = 0, labeller = function(x) x * 10000) +
+  ) +
+  scale_y_continuous(
+  breaks = seq(0, 20, by = 5) * study_spacing_factor,
+  labels = seq(0, 20, by = 5),
+  expand = expansion(mult = c(0.2, 0.2))
+) +
+
   coord_equal() +
   # coord_fixed(ratio = 1, expand = TRUE) +
  # coord_fixed(ratio = 1/2, xlim = NULL, ylim = NULL, expand = TRUE, clip = "on") +
    labs(
      title = "Cell Type Composition by Dataset and Year",
     x = "Year",
-     y = "Dataset Count by Year"
-   )+
+    y = "Dataset Count by Year"
+   ) +
   theme_minimal() +
   theme(
     panel.background = element_blank(),  # Remove background color
@@ -1764,7 +1782,7 @@ ggplot(data = df_grouped) +
     panel.grid = element_blank()         # Remove gridlines
   ) 
 
-ggsave(file = "howdy.pdf", width = 10, height = 10)
+ggsave(file = "howdyy.pdf", width = 8, height = 8)
 ```
 
 ```{r}
@@ -1843,5 +1861,81 @@ tm <- voronoiTreemap(
 )
 
 drawTreemap(tm, title = "Cell Type yurd", label_size = 2.1, color_type = "categorical", color_level = 1, border_size = 1, label_color = "white")
+```
+```{r}
+library(treemap)
+
+# Define dataset
+hoho <- data.frame(
+  labels = c(
+    "Collected Datasets", 
+    "Labeled single cell", "Unlabeled",
+    "Metadata file added", "No metadata file added", "No metadata file added",
+    "Usable datasets", "Not usable datasets",
+    "Emailed for spatial & metadata", "Emailed for spatial data", "Emailed for metadata",
+    "Received spatial and metadata", "Received spatial data", "Received metadata",
+    "Didn’t receive data", "Haven’t received data yet TBD",
+    "No metadata file added/Need to email"
+  ),
+  parent = c(
+    NA, 
+    "Collected Datasets", "Collected Datasets",
+    "Labeled single cell", "Labeled single cell", "Unlabeled",
+    "Metadata file added", "No metadata file added",
+    "No metadata file added", "No metadata file added", "No metadata file added",
+    "Emailed for spatial & metadata", "Emailed for spatial data", "Emailed for metadata",
+    "Emailed for metadata", "Emailed for spatial & metadata",
+    "No metadata file added"
+  ),
+  value = c(60, 58, 2, 37, 21, 2, 43, 17, 5, 3, 4, 2, 3, 1, 2, 4, 11)
+)
+
+# Generate treemap
+treemap(hoho,
+        index = c("parent", "labels"),
+        vSize = "value",
+        type = "index",
+        palette = "Set3",
+        title = "Collected Datasets Treemap")
+
+```
+```{r}
+library(ggplot2)
+
+# Create the data
+blocks <- data.frame(
+  xmin = c(0, 0, 8, 0, 8, 0, 8, 0, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5),
+  xmax = c(10, 8, 10, 8, 10, 8, 10, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 10),
+  ymin = c(4, 3, 3, 2, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+  ymax = c(5, 4, 4, 3, 3, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+  label = c(
+    "Collected Datasets\n(60)", "Labeled single cell\n(58)", "Unlabeled (2)",
+    "Metadata file added\n(37)", "No metadata file added\n(2)",
+    "Usable datasets\n(43)", "Not usable datasets\n(17)",
+    "Emailed for spatial & metadata\n(5)", "Emailed for spatial data\n(3)",
+    "Emailed for metadata\n(4)", "Received spatial and metadata\n(2)",
+    "Received spatial data\n(3)", "Received metadata\n(1)", "Didn’t receive data\n(2)",
+    "Haven’t received data yet TBD\n(4)", "No metadata file added/\nNeed to email (11)"
+  ),
+  fill = c(
+    "#cce0ff", "#ccebc5", "#fbb4ae",
+    "#66bb66", "#fbb4ae",
+    "#4daf4a", "#f4a582",
+    "#bdbdbd", "#bdbdbd", "#bdbdbd",
+    "#d9f0d3", "#d9f0d3", "#d9f0d3", "#fbb4ae", "#fbb4ae", "#fbb4ae"
+  )
+)
+
+# Plot
+ggplot(blocks) +
+  geom_rect(aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = fill), color = "black") +
+  geom_text(aes(x = (xmin + xmax)/2, y = (ymin + ymax)/2, label = label), size = 3, lineheight = 0.9) +
+  scale_fill_identity() +
+  theme_void()
+
+```
+
+```{r}
+
 ```
 
